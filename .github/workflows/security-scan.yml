@@ -1,0 +1,59 @@
+name: "Security Scan"
+
+# Standalone vulnerability scanning workflow using DeepSec Shield.
+# Local static (L2) rules only; no LLM credentials are required.
+# Run as a separate workflow so code scanning results appear in the
+# GitHub security UI independently of the main CI build.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  deepsec-shield:
+    name: DeepSec Shield Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          # full history is needed for git blame attribution of findings
+          fetch-depth: 0
+
+      - name: Run DeepSec Shield security scan
+        id: scan
+        # pinned to a specific commit for supply chain safety
+        uses: Unclecheng-li/DeepSec@c655b822a2aac09240169f21bbadf4ec182e0ff5
+        with:
+          path: .
+          # fail the run on high severity findings and above
+          fail_on: high
+          # local static rules only, no LLM credentials required
+          l2: "true"
+          l3: "false"
+          github_annotations: "true"
+          sarif: deepsec-results.sarif
+          markdown: deepsec-report.md
+          step_summary: "true"
+
+      - name: Upload SARIF results to code scanning
+        if: always() && hashFiles('deepsec-results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: deepsec-results.sarif
+
+      - name: Upload scan report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deepsec-report
+          path: deepsec-report.md
+          if-no-files-found: ignore
