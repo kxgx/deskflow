@@ -28,21 +28,39 @@ jobs:
           # full history is needed for git blame attribution of findings
           fetch-depth: 0
 
-      - name: Run DeepSec Shield security scan
-        id: scan
-        # pinned to a specific commit for supply chain safety
-        uses: Unclecheng-li/DeepSec@c655b822a2aac09240169f21bbadf4ec182e0ff5
+      # DeepSec is checked out and run directly instead of using its
+      # composite action, which is less transparent and currently
+      # broken (its setup-node cache step fails).
+      - name: Checkout DeepSec scanner (pinned)
+        uses: actions/checkout@v6
         with:
-          path: .
-          # fail the run on high severity findings and above
-          fail_on: high
-          # local static rules only, no LLM credentials required
-          l2: "true"
-          l3: "false"
-          github_annotations: "true"
-          sarif: deepsec-results.sarif
-          markdown: deepsec-report.md
-          step_summary: "true"
+          repository: Unclecheng-li/DeepSec
+          ref: c655b822a2aac09240169f21bbadf4ec182e0ff5
+          path: .deepsec
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Build DeepSec scanner
+        working-directory: .deepsec
+        run: |
+          npm ci
+          npm run build
+
+      - name: Run DeepSec Shield scan
+        working-directory: .deepsec
+        run: |
+          node dist/cli.js scan "$GITHUB_WORKSPACE" \
+            --fail-on high \
+            --package-verification seed \
+            --ai-detection author \
+            --github-annotations \
+            --sarif "$GITHUB_WORKSPACE/deepsec-results.sarif" \
+            --markdown "$GITHUB_WORKSPACE/deepsec-report.md" \
+            --storage auto \
+            --no-store-findings
 
       - name: Upload SARIF results to code scanning
         if: always() && hashFiles('deepsec-results.sarif') != ''
