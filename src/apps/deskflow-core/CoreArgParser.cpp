@@ -51,6 +51,10 @@ void CoreArgParser::parse()
   if (m_parser.isSet(CoreArgs::configOption)) {
     Settings::setSettingsFile(m_parser.value(CoreArgs::configOption));
   }
+
+  if (m_parser.isSet(CoreArgs::enableDragDropOption)) {
+    Settings::setValue(Settings::Server::EnableDragDrop, true);
+  }
 }
 
 [[noreturn]] void CoreArgParser::showHelpText() const

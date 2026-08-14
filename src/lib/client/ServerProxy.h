@@ -11,6 +11,7 @@
 #include "common/Enums.h"
 #include "deskflow/ClipboardChunk.h"
 #include "deskflow/ClipboardTypes.h"
+#include "deskflow/FileChunk.h"
 #include "deskflow/KeyTypes.h"
 #include "deskflow/KeyboardLayoutManager.h"
 
@@ -50,6 +51,12 @@ public:
   bool onGrabClipboard(ClipboardID);
   void onClipboardChanged(ClipboardID, const IClipboard *);
 
+  // sending file chunk to server
+  void fileChunkSending(uint8_t mark, char *data, size_t dataSize);
+
+  // sending dragging information to server
+  void sendDragInfo(uint32_t fileCount, const char *info, size_t size);
+
   //@}
 
 protected:
@@ -86,6 +93,8 @@ private:
   void leave();
   void setClipboard();
   void grabClipboard();
+  void fileChunkReceived();
+  void dragInfoReceived();
   void keyDown(uint16_t id, uint16_t mask, uint16_t button, const std::string &lang);
   void keyRepeat();
   void keyUp();
@@ -130,6 +139,7 @@ private:
   std::string m_serverLayout = "";
   std::string m_clipboardDataCached;
   ClipboardChunkAssemblyState m_clipboardChunkState;
+  FileChunkAssemblyState m_fileChunkState;
   bool m_isUserNotifiedAboutLayoutSyncError = false;
   deskflow::KeyboardLayoutManager m_layoutManager;
 };

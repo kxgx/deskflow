@@ -21,6 +21,8 @@
 #include <QList>
 #include <QPair>
 #include <QSet>
+#include <QTextDocument>
+#include <QTextDocumentFragment>
 #include <QVarLengthArray>
 #include <QtEndian>
 
@@ -105,6 +107,14 @@ QByteArray PortalClipboard::encodeFormat(IClipboard::Format format, const QByteA
   if (data.isEmpty())
     return {};
 
+  if (format == IClipboard::Format::HTML) {
+    // the cache holds an HTML fragment, but the portal expects a
+    // complete HTML document
+    QTextDocument doc;
+    doc.setHtml(QString::fromUtf8(data));
+    return doc.toHtml().toUtf8();
+  }
+
   if (format == IClipboard::Format::Bitmap) {
     const auto bmpFile = dibToBmp(data);
     if (bmpFile.isEmpty()) {
@@ -135,6 +145,13 @@ QByteArray PortalClipboard::decodeFormat(IClipboard::Format format, const QByteA
 {
   if (bytes.isEmpty())
     return {};
+
+  if (format == IClipboard::Format::HTML) {
+    // the portal provides a complete HTML document, but the cache
+    // expects an HTML fragment
+    const auto fragment = QTextDocumentFragment::fromHtml(QString::fromUtf8(bytes)).toHtml();
+    return fragment.toUtf8();
+  }
 
   if (format == IClipboard::Format::Bitmap) {
     QImage image;

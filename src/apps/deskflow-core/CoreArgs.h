@@ -19,6 +19,10 @@ struct CoreArgs
       QCommandLineOption("new-instance", "Skip the check for a running instance, always makes a new instance");
   inline static const auto configOption =
       QCommandLineOption({"s", "settings"}, "override configuration file to use", "configFile");
+  inline static const auto enableDragDropOption =
+      QCommandLineOption("enable-drag-drop", "Enable drag and drop file transfer");
 
-  inline static const auto options = {helpOption, versionOption, multiInstanceOption, configOption};
+  inline static const auto options = {
+      helpOption, versionOption, multiInstanceOption, configOption, enableDragDropOption
+  };
 };

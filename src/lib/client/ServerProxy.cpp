@@ -46,6 +46,10 @@ ServerProxy::ServerProxy(Client *client, deskflow::IStream *stream, IEventQueue 
   m_events->addHandler(EventTypes::ClipboardSending, this, [this](const auto &e) {
     ClipboardChunk::send(m_stream, e.getDataObject());
   });
+  m_events->addHandler(EventTypes::FileChunkSending, this, [this](const auto &e) {
+    auto *chunk = static_cast<FileChunk *>(e.getDataObject());
+    FileChunk::send(m_stream, chunk->m_chunk[0], &chunk->m_chunk[1], chunk->m_dataSize);
+  });
 
   // send heartbeat
   setKeepAliveRate(kKeepAliveRate);
@@ -56,6 +60,7 @@ ServerProxy::~ServerProxy()
   setKeepAliveRate(-1.0);
   m_events->removeHandler(EventTypes::StreamInputReady, m_stream->getEventTarget());
   m_events->removeHandler(EventTypes::ClipboardSending, this);
+  m_events->removeHandler(EventTypes::FileChunkSending, this);
 }
 
 void ServerProxy::resetKeepAliveAlarm()
@@ -307,6 +312,12 @@ ServerProxy::ConnectionResult ServerProxy::parseMessage(const uint8_t *code)
 
   else if (memcmp(code, kMsgDSecureInputNotification, 4) == 0) {
     secureInputNotification();
+  }
+
+  else if (memcmp(code, kMsgDFileTransfer, 4) == 0) {
+    fileChunkReceived();
+  } else if (memcmp(code, kMsgDDragInfo, 4) == 0) {
+    dragInfoReceived();
   }
 
   else if (memcmp(code, kMsgCClose, 4) == 0) {
@@ -840,6 +851,38 @@ void ServerProxy::infoAcknowledgment()
 {
   LOG_VERBOSE("recv info acknowledgment");
   m_ignoreMouse = false;
+}
+
+void ServerProxy::fileChunkReceived()
+{
+  auto result = FileChunk::assemble(m_stream, m_client->getReceivedFileData(), m_fileChunkState);
+
+  if (result == TransferState::Finished) {
+    m_client->onFileReceived(m_client->getReceivedFileData());
+  } else if (result == TransferState::Error) {
+    requestDisconnect("invalid file data from server");
+  }
+}
+
+void ServerProxy::dragInfoReceived()
+{
+  // parse
+  uint32_t fileNum = 0;
+  std::string content;
+  ProtocolUtil::readf(m_stream, kMsgDDragInfo + 4, &fileNum, &content);
+
+  m_client->dragInfoReceived(fileNum, content);
+}
+
+void ServerProxy::fileChunkSending(uint8_t mark, char *data, size_t dataSize)
+{
+  FileChunk::send(m_stream, mark, data, dataSize);
+}
+
+void ServerProxy::sendDragInfo(uint32_t fileCount, const char *info, size_t size)
+{
+  std::string data(info, size);
+  ProtocolUtil::writef(m_stream, kMsgDDragInfo, fileCount, &data);
 }
 
 void ServerProxy::secureInputNotification()

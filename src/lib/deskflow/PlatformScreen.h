@@ -78,6 +78,39 @@ public:
   void setSequenceNumber(uint32_t) override = 0;
   bool isPrimary() const override = 0;
 
+  //! @name drag and drop defaults
+  //@{
+
+  void setDraggingStarted(bool started) override
+  {
+    m_draggingStarted = started;
+  }
+  bool isDraggingStarted() override;
+  bool isFakeDraggingStarted() override
+  {
+    return m_fakeDraggingStarted;
+  }
+  std::string &getDraggingFilename() override
+  {
+    return m_draggingFilename;
+  }
+  void clearDraggingFilename() override
+  {
+    m_draggingFilename.clear();
+  }
+
+  //! Default implementation does nothing, so received files are
+  //! simply written to the drop target directory.
+  void fakeDraggingFiles(DragFileList) override
+  {
+    // do nothing
+  }
+
+  //! Default drop target is the user's desktop directory.
+  const std::string &getDropTarget() const override;
+
+  //@}
+
 protected:
   //! Update mouse buttons
   /*!
@@ -103,4 +136,10 @@ protected:
 
   // Delta for a "click"
   static const auto s_scrollDelta = 120;
+
+protected:
+  std::string m_draggingFilename;
+  bool m_draggingStarted = false;
+  bool m_fakeDraggingStarted = false;
+  mutable std::string m_dropTarget;
 };

@@ -7,8 +7,12 @@
  */
 
 #include "deskflow/PlatformScreen.h"
+
 #include "base/DirectionTypes.h"
-#include "deskflow/App.h"
+#include "base/Log.h"
+
+#include <QDir>
+#include <QStandardPaths>
 
 PlatformScreen::PlatformScreen(IEventQueue *events) : IPlatformScreen(events)
 {
@@ -86,6 +90,24 @@ void PlatformScreen::pollPressedKeys(KeyButtonSet &pressedKeys) const
 void PlatformScreen::clearStaleModifiers()
 {
   getKeyState()->clearStaleModifiers();
+}
+
+bool PlatformScreen::isDraggingStarted()
+{
+  return m_draggingStarted;
+}
+
+const std::string &PlatformScreen::getDropTarget() const
+{
+  if (m_dropTarget.empty()) {
+    m_dropTarget = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation).toStdString();
+    if (m_dropTarget.empty()) {
+      m_dropTarget = QDir::homePath().toStdString();
+      LOG_WARN("desktop location not found, using home directory as drop target: %s", m_dropTarget.c_str());
+    }
+    LOG_DEBUG("using drop target directory: %s", m_dropTarget.c_str());
+  }
+  return m_dropTarget;
 }
 
 std::string PlatformScreen::sidesMaskToString(uint32_t sides)
