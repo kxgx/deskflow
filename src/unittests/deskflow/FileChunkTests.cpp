@@ -155,7 +155,9 @@ std::string encodeFileMsg(uint8_t mark, const std::string &data)
 {
   BufferWriteStream stream;
   auto payload = data;
-  ProtocolUtil::writef(&stream, kMsgDFileTransfer, mark, &payload);
+  // note: the 4 byte message code is consumed by the message dispatcher
+  // before FileChunk::assemble() runs, so only encode the arguments
+  ProtocolUtil::writef(&stream, kMsgDFileTransfer + 4, mark, &payload);
   return stream.str();
 }
 

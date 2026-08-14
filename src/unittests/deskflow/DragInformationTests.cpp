@@ -9,6 +9,8 @@
 #include "base/Log.h"
 #include "deskflow/DragInformation.h"
 
+#include <QTemporaryFile>
+
 void DragInformationTests::initTestCase()
 {
   m_log.setFilter(LogLevel::Level::Debug);
@@ -67,15 +69,21 @@ void DragInformationTests::parseDragInfoFiles_fullPaths()
 
 void DragInformationTests::setupDragInfo_format()
 {
+  QTemporaryFile tempFile;
+  QVERIFY(tempFile.open());
+  tempFile.write(QByteArray(42, 'x'));
+  tempFile.close();
+
   DragFileList list;
   DragInformation di;
-  di.setFilename("file.txt");
-  di.setFilesize(42);
+  di.setFilename(tempFile.fileName().toStdString());
   list.push_back(di);
 
   std::string output;
   const int count = DragInformation::setupDragInfo(list, output);
 
   QCOMPARE(count, 1);
-  QVERIFY(output.starts_with("file.txt,42,"));
+  QVERIFY(output.starts_with(tempFile.fileName().toStdString() + ",42,"));
 }
+
+QTEST_MAIN(DragInformationTests)
