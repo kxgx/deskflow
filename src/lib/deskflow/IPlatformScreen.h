@@ -9,6 +9,7 @@
 #pragma once
 
 #include "deskflow/ClipboardTypes.h"
+#include "deskflow/DragInformation.h"
 #include "deskflow/IKeyState.h"
 #include "deskflow/IPrimaryScreen.h"
 #include "deskflow/IScreen.h"
@@ -128,6 +129,12 @@ public:
   */
   virtual void setSequenceNumber(uint32_t) = 0;
 
+  //! Change dragging status
+  /*!
+  Marks whether or not a file drag is in progress on this screen.
+  */
+  virtual void setDraggingStarted(bool started) = 0;
+
   //! Determine the name of the app causing a secure input state
   /*!
   On MacOS check which app causes a secure input state to be enabled. No
@@ -144,6 +151,37 @@ public:
   Return true iff this screen is a primary screen.
   */
   virtual bool isPrimary() const = 0;
+
+  //! Get the files that are being dragged
+  /*!
+  Returns a string of comma separated "filename,size" pairs describing
+  the files currently being dragged on this screen. Empty if no drag
+  is in progress.
+  */
+  virtual std::string &getDraggingFilename() = 0;
+
+  //! Clear the filename of the file that was dragged
+  virtual void clearDraggingFilename() = 0;
+
+  //! Test if file is dragged on this screen
+  virtual bool isDraggingStarted() = 0;
+
+  //! Test if a fake drag is in progress on this screen
+  virtual bool isFakeDraggingStarted() = 0;
+
+  //! Fake a files dragging operation
+  /*!
+  Simulates a drag of \p fileList on this screen. The default
+  implementation does nothing, which means received files are simply
+  written to the drop target directory (see getDropTarget()).
+  */
+  virtual void fakeDraggingFiles(DragFileList fileList) = 0;
+
+  //! Get the drop target directory
+  /*!
+  Returns the directory where received files are written.
+  */
+  virtual const std::string &getDropTarget() const = 0;
 
   //@}
   // IKeyState overrides

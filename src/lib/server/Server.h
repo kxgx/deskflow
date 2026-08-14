@@ -13,13 +13,19 @@
 #include "common/NetworkProtocol.h"
 #include "deskflow/Clipboard.h"
 #include "deskflow/ClipboardTypes.h"
+#include "deskflow/DragInformation.h"
+#include "deskflow/FileChunk.h"
 #include "deskflow/KeyTypes.h"
 #include "deskflow/MouseTypes.h"
+#include "deskflow/StreamChunker.h"
 #include "server/Config.h"
 
+#include <atomic>
 #include <climits>
 #include <map>
+#include <memory>
 #include <set>
+#include <utility>
 #include <vector>
 
 class BaseClientProxy;
@@ -170,6 +176,15 @@ public:
   */
   void disconnect();
 
+  //! Create a new thread and use it to send files to the client
+  void sendFileToClient(const DragFileList &files);
+
+  //! Received dragging information from client
+  void dragInfoReceived(uint32_t fileNum, const std::string &content);
+
+  //! Received a complete file from a client
+  void onFileReceived(const std::string &data);
+
   //! Store ClientListener pointer
   void setListener(ClientListener *p)
   {
@@ -199,6 +214,18 @@ public:
   void getClients(std::vector<std::string> &list) const;
   void sendConnectedClientsIpc() const;
   size_t getMaximumClipboardSizeBytes() const;
+
+  //! Return received file data
+  std::string &getReceivedFileData()
+  {
+    return m_receivedFileData;
+  }
+
+  //! Return file chunk assembly state
+  FileChunkAssemblyState &getFileChunkState()
+  {
+    return m_fileChunkState;
+  }
 
   //@}
 
@@ -323,6 +350,8 @@ private:
   void handleToggleScreenEvent(const Event &);
   void handleKeyboardBroadcastEvent(const Event &event);
   void handleLockCursorToScreenEvent(const Event &event);
+  void handleFileChunkSendingEvent(const Event &event);
+  void handleDragInfoReady(const Event &event);
 
   // event processing
   void onClipboardChanged(const BaseClientProxy *sender, ClipboardID id, uint32_t seqNum);
@@ -359,6 +388,15 @@ private:
   // force the cursor off of \p client
   void forceLeaveClient(const BaseClientProxy *client);
 
+  // thread function for sending files
+  void sendFileThread(const void *);
+
+  // thread function for writing files to drop directory
+  void writeToDropDirThread(const void *);
+
+  // thread function for sending drag information
+  void sendDragInfoThread(const void *);
+
 private:
   class ClipboardInfo
   {
@@ -370,6 +408,35 @@ private:
     std::string m_clipboardData;
     std::string m_clipboardOwner;
     uint32_t m_clipboardSeqNum = 0;
+  };
+
+  // job data for writing received files to the drop target directory
+  struct DropJob
+  {
+    std::string target;
+    DragFileList files;
+    std::vector<std::string> data;
+  };
+
+  // job data for sending files to a client
+  struct SendFileJob
+  {
+    DragFileList files;
+    std::shared_ptr<FileTransferState> state;
+    std::string targetName;
+  };
+
+  // drag information ready to be sent to a client
+  class DragInfoData : public EventData
+  {
+  public:
+    DragInfoData(std::string screenName, DragFileList files) : m_screenName(std::move(screenName)), m_files(std::move(files))
+    {
+    }
+
+  public:
+    std::string m_screenName;
+    DragFileList m_files;
   };
   // Order suggested by clang
 
@@ -468,4 +535,19 @@ private:
   bool m_defaultLockToScreenState = false;
   bool m_disableLockToScreen = false;
   bool m_enableClipboard = true;
+  bool m_enableDragDrop = false;
+
+  // file transfer
+  using AutoThread = std::unique_ptr<Thread>;
+  FileChunkAssemblyState m_fileChunkState;
+  DragFileList m_fakeDragFileList;
+  std::string m_receivedFileData;
+  std::vector<std::string> m_receivedFiles;
+  AutoThread m_sendFileThread;
+  AutoThread m_writeToDropDirThread;
+  AutoThread m_sendDragInfoThread;
+  std::weak_ptr<FileTransferState> m_fileTransferState;
+  std::string m_fileTransferTargetName;
+  std::atomic<bool> m_waitDragInfoThread{true};
+  std::atomic<bool> m_sendDragInfoDone{true};
 };

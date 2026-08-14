@@ -67,6 +67,8 @@ protected:
   void toggleClipboard(bool enabled);
   void setClipboardLimit(int limit);
 
+  void toggleDragDrop(bool enabled);
+
   void toggleHeartbeat(bool enabled);
   void setHeartbeat(int rate);
 
@@ -99,6 +101,7 @@ private:
   ServerConfig &m_originalServerConfig;
   NetworkProtocol m_protocol;
   bool m_enableClipboard;
+  bool m_enableDragDrop;
   bool m_enableHeartbeat;
   int m_heartbeatRate;
   int m_switchDelay;

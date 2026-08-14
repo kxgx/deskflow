@@ -378,6 +378,39 @@
            </widget>
           </item>
           <item>
+           <layout class="QHBoxLayout" name="layoutDragDrop">
+            <item>
+             <widget class="QCheckBox" name="cbEnableDragDrop">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="text">
+               <string>Enable drag and drop file transfer</string>
+              </property>
+              <property name="checked">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerDragDrop">
+              <property name="orientation">
+               <enum>Qt::Orientation::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <item>
            <layout class="QHBoxLayout" name="layoutClipboard">
             <item>
              <widget class="QCheckBox" name="cbEnableClipboard">

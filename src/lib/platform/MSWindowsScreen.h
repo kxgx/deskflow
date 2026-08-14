@@ -8,11 +8,13 @@
 
 #pragma once
 
+#include "deskflow/DragInformation.h"
 #include "deskflow/PlatformScreen.h"
 #include "platform/MSWindowsHook.h"
 #include "platform/MSWindowsPowerManager.h"
 
 #include <map>
+#include <memory>
 #include <string>
 
 #define WIN32_LEAN_AND_MEAN
@@ -122,6 +124,9 @@ public:
   bool isPrimary() const override;
   std::string getSecureInputApp() const override;
 
+  //! Get the "filename,size" pairs of the files being dragged
+  std::string &getDraggingFilename() override;
+
 protected:
   // IPlatformScreen overrides
   void handleSystemEvent(const Event &event) override;
@@ -139,6 +144,7 @@ private:
   ATOM createDeskWindowClass(bool isPrimary) const;
   void destroyClass(ATOM windowClass) const;
   HWND createWindow(ATOM windowClass, const wchar_t *name) const;
+  HWND createDropWindow(ATOM windowClass, const wchar_t *name) const;
   void destroyWindow(HWND) const;
 
   // convenience function to send events
@@ -225,6 +231,9 @@ private: // HACK
 
   // check if it is a modifier key repeating message
   bool isModifierRepeat(KeyModifierMask oldState, KeyModifierMask state, WPARAM wParam) const;
+
+  // send drag info and data back to server
+  void sendDragThread(const void *);
 
 private:
   struct HotKeyItem
@@ -333,6 +342,12 @@ private:
   IEventQueue *m_events;
 
   std::string m_desktopPath;
+
+  // drag and drop support
+  MSWindowsDropTarget *m_dropTarget = nullptr;
+  HWND m_dropWindow = nullptr;
+  int m_dropWindowSize = 20;
+  std::unique_ptr<Thread> m_sendDragThread;
 
   PrimaryKeyDownList m_primaryKeyDownList;
   MSWindowsPowerManager m_powerManager;

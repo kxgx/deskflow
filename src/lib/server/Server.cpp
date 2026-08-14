@@ -8,10 +8,13 @@
 
 #include "server/Server.h"
 
+#include "arch/Arch.h"
 #include "base/IEventQueue.h"
 #include "base/Log.h"
+#include "base/TMethodJob.h"
 #include "deskflow/AppUtil.h"
 #include "deskflow/DeskflowException.h"
+#include "deskflow/DropHelper.h"
 #include "deskflow/IPlatformScreen.h"
 #include "deskflow/OptionTypes.h"
 #include "deskflow/PacketStreamFilter.h"
@@ -19,6 +22,7 @@
 #include "deskflow/Screen.h"
 #include "deskflow/StreamChunker.h"
 #include "deskflow/ipc/CoreIpc.h"
+#include "mt/Thread.h"
 #include "net/TCPSocket.h"
 #include "server/ClientListener.h"
 #include "server/ClientProxy.h"
@@ -119,6 +123,12 @@ Server::Server(ServerConfig &config, PrimaryClient *primaryClient, deskflow::Scr
   m_events->addHandler(EventTypes::PrimaryScreenFakeInputEnd, m_inputFilter, [this](const auto &) {
     m_primaryClient->fakeInputEnd();
   });
+  m_events->addHandler(EventTypes::FileChunkSending, this, [this](const auto &e) {
+    handleFileChunkSendingEvent(e);
+  });
+  m_events->addHandler(EventTypes::DragInfoReady, this, [this](const auto &e) {
+    handleDragInfoReady(e);
+  });
 
   // add connection
   addClient(m_primaryClient);
@@ -143,6 +153,21 @@ Server::Server(ServerConfig &config, PrimaryClient *primaryClient, deskflow::Scr
 
 Server::~Server()
 {
+  // interrupt and wait for any file transfer threads to finish so they
+  // never touch members that are about to be destroyed
+  if (auto state = m_fileTransferState.lock()) {
+    state->interrupted = true;
+  }
+  if (m_sendFileThread) {
+    m_sendFileThread->wait();
+  }
+  if (m_writeToDropDirThread) {
+    m_writeToDropDirThread->wait();
+  }
+  if (m_sendDragInfoThread) {
+    m_sendDragInfoThread->wait();
+  }
+
   // remove event handlers and timers
   using enum EventTypes;
   m_events->removeHandler(KeyStateKeyDown, m_inputFilter);
@@ -157,6 +182,8 @@ Server::~Server()
   m_events->removeHandler(PrimaryScreenSaverDeactivated, m_primaryClient->getEventTarget());
   m_events->removeHandler(PrimaryScreenFakeInputBegin, m_inputFilter);
   m_events->removeHandler(PrimaryScreenFakeInputEnd, m_inputFilter);
+  m_events->removeHandler(FileChunkSending, this);
+  m_events->removeHandler(DragInfoReady, this);
   m_events->removeHandler(Timer, this);
   stopSwitch();
 
@@ -1098,6 +1125,10 @@ void Server::processOptions()
       if (!m_enableClipboard) {
         LOG_INFO("clipboard sharing is disabled");
       }
+    } else if (id == kOptionEnableDragDrop) {
+      m_enableDragDrop = (value != 0);
+      m_screen->setEnableDragDrop(m_enableDragDrop);
+      LOG_INFO("drag and drop %s", m_enableDragDrop ? "enabled" : "disabled");
     } else if (id == kOptionClipboardSharingSize) {
       if (value <= 0) {
         m_maximumClipboardSize = 0;
@@ -1583,6 +1614,11 @@ void Server::onMouseDown(ButtonID id)
 
   // relay
   m_active->mouseDown(id);
+
+  // allow a new drag info thread on the next screen switch; do not
+  // reset m_sendDragInfoDone here, as a previous worker may still be
+  // running and would then race with a new one.
+  m_waitDragInfoThread = true;
 }
 
 void Server::onMouseUp(ButtonID id)
@@ -1592,6 +1628,22 @@ void Server::onMouseUp(ButtonID id)
 
   // relay
   m_active->mouseUp(id);
+
+  if (m_enableDragDrop && id == kButtonLeft) {
+    // if the cursor is on a client screen, send the dragged files
+    if (!m_screen->isOnScreen()) {
+      const std::string &file = m_screen->getDraggingFilename();
+      if (!file.empty()) {
+        const DragFileList files = DragInformation::parseDragInfoFiles(file);
+        if (!files.empty()) {
+          sendFileToClient(files);
+        }
+      }
+    }
+
+    // always clear dragging filename
+    m_screen->clearDraggingFilename();
+  }
 }
 
 bool Server::onMouseMovePrimary(int32_t x, int32_t y)
@@ -1682,8 +1734,20 @@ bool Server::onMouseMovePrimary(int32_t x, int32_t y)
 
     // should we switch or not?
     if (isSwitchOkay(newScreen, dir, x, y, xc, yc)) {
+      // if a drag is in progress, send the drag info to the new screen
+      // first and wait for the next mouse motion before switching.
+      if (m_enableDragDrop && m_screen->isDraggingStarted() && newScreen != m_active && m_waitDragInfoThread) {
+        if (m_sendDragInfoDone) {
+          m_sendDragInfoDone = false;
+          auto *screenName = new std::string(getName(newScreen));
+          m_sendDragInfoThread.reset(new Thread(new TMethodJob<Server>(this, &Server::sendDragInfoThread, screenName)));
+        }
+        return false;
+      }
+
       // switch screen
       switchScreen(newScreen, x, y, false);
+      m_waitDragInfoThread = true;
       return true;
     }
   }
@@ -1831,6 +1895,12 @@ void Server::onMouseMoveSecondary(int32_t dx, int32_t dy)
   } while (false);
 
   if (jump) {
+    // interrupt any file transfer before switching screens
+    if (auto state = m_fileTransferState.lock()) {
+      state->interrupted = true;
+    }
+    m_sendFileThread.reset(nullptr);
+
     int32_t newX = m_x;
     int32_t newY = m_y;
 
@@ -1870,6 +1940,150 @@ void Server::onMouseWheel(int32_t xDelta, int32_t yDelta)
 
   // relay
   m_active->mouseWheel(xDelta, yDelta);
+}
+
+void Server::handleFileChunkSendingEvent(const Event &event)
+{
+  auto *chunk = static_cast<FileChunk *>(event.getDataObject());
+
+  LOG_VERBOSE("sending file chunk");
+  const auto index = m_clients.find(m_fileTransferTargetName);
+  if (index == m_clients.end()) {
+    LOG_DEBUG("file chunk dropped, screen \"%s\" no longer connected", m_fileTransferTargetName.c_str());
+    return;
+  }
+
+  // relay to the client that was active when the transfer started
+  index->second->fileChunkSending(chunk->m_chunk[0], &chunk->m_chunk[1], chunk->m_dataSize);
+}
+
+void Server::handleDragInfoReady(const Event &event)
+{
+  auto *data = static_cast<DragInfoData *>(event.getDataObject());
+
+  const auto index = m_clients.find(data->m_screenName);
+  if (index == m_clients.end()) {
+    LOG_DEBUG("drag info dropped, screen \"%s\" no longer connected", data->m_screenName.c_str());
+    return;
+  }
+
+  std::string infoString;
+  uint32_t fileCount = 0;
+  try {
+    fileCount = DragInformation::setupDragInfo(data->m_files, infoString);
+  } catch (std::exception &error) {
+    LOG_ERR("failed to build drag info: %s", error.what());
+  }
+  if (fileCount == 0) {
+    return;
+  }
+
+  LOG_DEBUG("sending drag information to client \"%s\"", data->m_screenName.c_str());
+  LOG_VERBOSE("dragging file list: %s", infoString.c_str());
+  LOG_VERBOSE("dragging file list string size: %d", infoString.size());
+  index->second->sendDragInfo(fileCount, infoString.c_str(), infoString.size());
+}
+
+void Server::sendDragInfoThread(const void *arg)
+{
+  const auto *screenName = static_cast<const std::string *>(arg);
+
+  DragFileList files;
+  try {
+    const std::string &info = m_screen->getDraggingFilename();
+    if (!info.empty()) {
+      files = DragInformation::parseDragInfoFiles(info);
+    }
+  } catch (std::exception &error) {
+    LOG_ERR("failed to get dragging files: %s", error.what());
+  }
+
+  if (!files.empty()) {
+    m_events->addEvent(Event(EventTypes::DragInfoReady, this, new DragInfoData(*screenName, std::move(files))));
+  }
+
+  delete screenName;
+  m_waitDragInfoThread = false;
+  m_sendDragInfoDone = true;
+}
+
+void Server::sendFileToClient(const DragFileList &files)
+{
+  // interrupt any transfer in progress
+  if (auto state = m_fileTransferState.lock()) {
+    state->interrupted = true;
+  }
+
+  auto state = std::make_shared<FileTransferState>();
+  m_fileTransferState = state;
+  m_fileTransferTargetName = getName(m_active);
+  auto *job = new SendFileJob{files, state, m_fileTransferTargetName};
+  m_sendFileThread.reset(new Thread(new TMethodJob<Server>(this, &Server::sendFileThread, job)));
+}
+
+void Server::sendFileThread(const void *arg)
+{
+  try {
+    auto *job = static_cast<const SendFileJob *>(arg);
+    for (const auto &file : job->files) {
+      LOG_DEBUG("sending file to client, filename=%s", file.getFilename().c_str());
+      if (!StreamChunker::sendFile(file.getFilename(), m_events, this, job->state)) {
+        LOG_WARN("file transfer interrupted, stopping: %s", file.getFilename().c_str());
+        break;
+      }
+    }
+  } catch (std::exception &error) {
+    LOG_ERR("failed sending file chunks, error: %s", error.what());
+  }
+
+  delete static_cast<const SendFileJob *>(arg);
+}
+
+void Server::onFileReceived(const std::string &data)
+{
+  if (m_fakeDragFileList.empty()) {
+    LOG_DEBUG("received file data with no drag in progress, ignoring");
+    return;
+  }
+
+  m_receivedFiles.push_back(data);
+  m_receivedFileData.clear();
+
+  if (m_receivedFiles.size() != m_fakeDragFileList.size()) {
+    LOG_DEBUG("received %d of %d files", m_receivedFiles.size(), m_fakeDragFileList.size());
+    return;
+  }
+
+  auto *job = new DropJob{m_screen->getDropTarget(), m_fakeDragFileList, m_receivedFiles};
+  m_writeToDropDirThread.reset(new Thread(new TMethodJob<Server>(this, &Server::writeToDropDirThread, job)));
+}
+
+void Server::writeToDropDirThread(const void *arg)
+{
+  LOG_DEBUG("starting write to drop dir thread");
+
+  // wait for any fake drag to complete before writing the files
+  while (m_screen->isFakeDraggingStarted()) {
+    ARCH->sleep(0.1f);
+  }
+
+  auto *job = static_cast<const DropJob *>(arg);
+  DropHelper::writeToDir(job->target, job->files, job->data);
+  delete job;
+}
+
+void Server::dragInfoReceived(uint32_t fileNum, const std::string &content)
+{
+  if (!m_enableDragDrop) {
+    LOG_DEBUG("drag and drop not enabled, ignoring drag info");
+    return;
+  }
+
+  DragInformation::parseDragInfo(m_fakeDragFileList, fileNum, content);
+  m_receivedFiles.clear();
+  m_receivedFileData.clear();
+
+  m_screen->startDraggingFiles(m_fakeDragFileList);
 }
 
 bool Server::addClient(BaseClientProxy *client)

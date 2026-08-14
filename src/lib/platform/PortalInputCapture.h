@@ -34,6 +34,15 @@ public:
 
   // Get the clipboard for the specified ID
   EiClipboard *getClipboard(ClipboardID id) const;
+
+  //! Re-advertise the cached clipboard to the portal selection.
+  /*!
+  Should be called after the clipboard cache has been updated so that
+  local applications see the new selection. Does nothing unless the
+  input capture session is active.
+  */
+  void reclaimClipboardOwnership();
+
   void enable();
   void disable();
   void release();

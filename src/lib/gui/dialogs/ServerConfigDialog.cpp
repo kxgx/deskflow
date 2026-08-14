@@ -75,6 +75,7 @@ void ServerConfigDialog::accept()
   Settings::setValue(Settings::Server::Protocol, networkProtocolToOption(m_protocol));
   Settings::setValue(Settings::Server::EnableClipboard, m_enableClipboard);
   Settings::setValue(Settings::Server::ClipboardSize, m_clipboardSize);
+  Settings::setValue(Settings::Server::EnableDragDrop, m_enableDragDrop);
   Settings::setValue(Settings::Server::EnableHeatbeat, m_enableHeartbeat);
   Settings::setValue(Settings::Server::Heartbeat, m_heartbeatRate);
   Settings::setValue(Settings::Server::EnableSwitchDelay, m_enableSwitchDelay);
@@ -236,6 +237,15 @@ void ServerConfigDialog::toggleClipboard(bool enabled)
     m_clipboardSize = Settings::defaultValue(Settings::Server::ClipboardSize).toUInt();
     ui->sbClipboardSizeLimit->setValue(m_clipboardSize ? m_clipboardSize : 1);
   }
+  onChange();
+}
+
+void ServerConfigDialog::toggleDragDrop(bool enabled)
+{
+  if (m_enableDragDrop == enabled)
+    return;
+
+  m_enableDragDrop = enabled;
   onChange();
 }
 
@@ -430,6 +440,9 @@ void ServerConfigDialog::loadFromConfig()
   m_clipboardSize = Settings::value(Settings::Server::ClipboardSize).toUInt();
   ui->sbClipboardSizeLimit->setValue(m_clipboardSize);
 
+  m_enableDragDrop = Settings::value(Settings::Server::EnableDragDrop).toBool();
+  ui->cbEnableDragDrop->setChecked(m_enableDragDrop);
+
   ui->listHotkeys->clear();
   for (const Hotkey &hotkey : std::as_const(serverConfig().hotkeys()))
     ui->listHotkeys->addItem(hotkey.text());
@@ -486,6 +499,7 @@ void ServerConfigDialog::initConnections() const
 
   connect(ui->cbRelativeMouseMoves, &QCheckBox::toggled, this, &ServerConfigDialog::toggleRelativeMouseMoves);
   connect(ui->cbEnableClipboard, &QCheckBox::toggled, this, &ServerConfigDialog::toggleClipboard);
+  connect(ui->cbEnableDragDrop, &QCheckBox::toggled, this, &ServerConfigDialog::toggleDragDrop);
   connect(ui->btnBrowseConfigFile, &QPushButton::clicked, this, &ServerConfigDialog::browseConfigFile);
   connect(ui->groupExternalConfig, &QGroupBox::toggled, this, &ServerConfigDialog::toggleExternalConfig);
 
@@ -522,6 +536,7 @@ void ServerConfigDialog::onChange()
       m_protocol == Settings::networkProtocol() &&
       m_enableClipboard == Settings::value(Settings::Server::EnableClipboard).toBool() &&
       m_clipboardSize == Settings::value(Settings::Server::ClipboardSize).toUInt() &&
+      m_enableDragDrop == Settings::value(Settings::Server::EnableDragDrop).toBool() &&
       m_enableHeartbeat == Settings::value(Settings::Server::EnableHeatbeat).toBool() &&
       m_heartbeatRate == Settings::value(Settings::Server::Heartbeat).toInt() &&
       m_enableSwitchDelay == Settings::value(Settings::Server::EnableSwitchDelay).toBool() &&

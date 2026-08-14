@@ -11,11 +11,13 @@
 #include "arch/Arch.h"
 #include "base/IEventQueue.h"
 #include "base/Log.h"
+#include "base/TMethodJob.h"
 #include "client/ServerProxy.h"
 #include "common/NetworkProtocol.h"
 #include "common/Settings.h"
 #include "deskflow/Clipboard.h"
 #include "deskflow/DeskflowException.h"
+#include "deskflow/DropHelper.h"
 #include "deskflow/IPlatformScreen.h"
 #include "deskflow/PacketStreamFilter.h"
 #include "deskflow/ProtocolTypes.h"
@@ -23,6 +25,7 @@
 #include "deskflow/Screen.h"
 #include "deskflow/StreamChunker.h"
 #include "deskflow/ipc/CoreIpc.h"
+#include "mt/Thread.h"
 #include "net/IDataSocket.h"
 #include "net/ISocketFactory.h"
 #include "net/SecureSocket.h"
@@ -76,6 +79,21 @@ Client::~Client()
 {
   m_events->removeHandler(EventTypes::ScreenSuspend, getEventTarget());
   m_events->removeHandler(EventTypes::ScreenResume, getEventTarget());
+
+  // interrupt and wait for any file transfer threads to finish so they
+  // never touch members that are about to be destroyed
+  {
+    std::lock_guard lock(m_fileTransferMutex);
+    if (auto state = m_fileTransferState.lock()) {
+      state->interrupted = true;
+    }
+  }
+  if (m_sendFileThread) {
+    m_sendFileThread->wait();
+  }
+  if (m_writeToDropDirThread) {
+    m_writeToDropDirThread->wait();
+  }
 
   cleanupTimer();
   cleanupScreen();
@@ -227,6 +245,15 @@ void Client::enter(int32_t xAbs, int32_t yAbs, uint32_t, KeyModifierMask mask, b
   }
   m_screen->mouseMove(xAbs, yAbs);
   m_screen->enter(mask);
+
+  // interrupt any file transfer when the cursor enters this screen
+  {
+    std::lock_guard lock(m_fileTransferMutex);
+    if (auto state = m_fileTransferState.lock()) {
+      state->interrupted = true;
+    }
+    m_sendFileThread.reset(nullptr);
+  }
 }
 
 bool Client::leave()
@@ -350,6 +377,13 @@ void Client::setOptions(const OptionsList &options)
         if (m_relativeMouseMoves && m_ready && !m_hasRelativeRestorePosition) {
           saveRelativeRestorePosition();
         }
+      }
+    } else if (id == kOptionEnableDragDrop) {
+      index++;
+      if (index != options.end()) {
+        m_enableDragDrop = (*index != 0);
+        m_screen->setEnableDragDrop(m_enableDragDrop);
+        LOG_INFO("drag and drop %s by server", m_enableDragDrop ? "enabled" : "disabled");
       }
     }
   }
@@ -737,4 +771,89 @@ void Client::bindNetworkInterface(IDataSocket *socket) const
   bindAddress.resolve();
 
   socket->bind(bindAddress);
+}
+
+void Client::dragInfoReceived(uint32_t fileNum, const std::string &data)
+{
+  if (!m_enableDragDrop) {
+    LOG_DEBUG("drag and drop not enabled, ignoring drag info");
+    return;
+  }
+
+  DragInformation::parseDragInfo(m_dragFileList, fileNum, data);
+  m_receivedFiles.clear();
+  m_receivedFileData.clear();
+
+  m_screen->startDraggingFiles(m_dragFileList);
+}
+
+void Client::onFileReceived(const std::string &data)
+{
+  if (m_dragFileList.empty()) {
+    LOG_DEBUG("received file data with no drag in progress, ignoring");
+    return;
+  }
+
+  m_receivedFiles.push_back(data);
+  m_receivedFileData.clear();
+
+  if (m_receivedFiles.size() != m_dragFileList.size()) {
+    LOG_DEBUG("received %d of %d files", m_receivedFiles.size(), m_dragFileList.size());
+    return;
+  }
+
+  auto *job = new DropJob{m_screen->getDropTarget(), m_dragFileList, m_receivedFiles};
+  m_writeToDropDirThread.reset(new Thread(new TMethodJob<Client>(this, &Client::writeToDropDirThread, job)));
+}
+
+void Client::writeToDropDirThread(const void *arg)
+{
+  LOG_DEBUG("starting write to drop dir thread");
+
+  // wait for any fake drag to complete before writing the files
+  while (m_screen->isFakeDraggingStarted()) {
+    ARCH->sleep(0.1f);
+  }
+
+  auto *job = static_cast<const DropJob *>(arg);
+  DropHelper::writeToDir(job->target, job->files, job->data);
+  delete job;
+}
+
+void Client::sendFileToServer(const DragFileList &files)
+{
+  std::lock_guard lock(m_fileTransferMutex);
+
+  // interrupt any transfer in progress
+  if (auto state = m_fileTransferState.lock()) {
+    state->interrupted = true;
+  }
+
+  auto state = std::make_shared<FileTransferState>();
+  m_fileTransferState = state;
+  auto *job = new SendFileJob{files, state};
+  m_sendFileThread.reset(new Thread(new TMethodJob<Client>(this, &Client::sendFileThread, job)));
+}
+
+void Client::sendFileThread(const void *arg)
+{
+  try {
+    auto *job = static_cast<const SendFileJob *>(arg);
+    for (const auto &file : job->files) {
+      LOG_DEBUG("sending file to server, filename=%s", file.getFilename().c_str());
+      if (!StreamChunker::sendFile(file.getFilename(), m_events, m_server, job->state)) {
+        LOG_WARN("file transfer interrupted, stopping: %s", file.getFilename().c_str());
+        break;
+      }
+    }
+  } catch (std::exception &error) {
+    LOG_ERR("failed sending file chunks: %s", error.what());
+  }
+
+  delete static_cast<const SendFileJob *>(arg);
+}
+
+void Client::sendDragInfo(uint32_t fileCount, const std::string &info, size_t size)
+{
+  m_server->sendDragInfo(fileCount, info.c_str(), size);
 }

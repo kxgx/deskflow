@@ -257,6 +257,17 @@ void PortalInputCapture::claimClipboardOwnership([[maybe_unused]] XdpSession *se
 #endif
 }
 
+void PortalInputCapture::reclaimClipboardOwnership()
+{
+#ifdef HAVE_LIBPORTAL_CLIPBOARD
+  if (!m_session || !m_isActive) {
+    return;
+  }
+  auto *session = xdp_input_capture_session_get_session(m_session);
+  PortalClipboard::claimOwnership(m_clipboard, session);
+#endif
+}
+
 void PortalInputCapture::readClipboardSelection(XdpSession *session) const
 {
 #ifdef HAVE_LIBPORTAL_CLIPBOARD

@@ -13,11 +13,16 @@
 #include "base/Event.h"
 #include "base/EventTypes.h"
 #include "common/Enums.h"
+#include "deskflow/DragInformation.h"
 #include "deskflow/IClipboard.h"
+#include "deskflow/StreamChunker.h"
 #include "net/NetworkAddress.h"
 
 #include <climits>
+#include <memory>
+#include <mutex>
 #include <string>
+#include <vector>
 
 class Event;
 class EventQueueTimer;
@@ -132,6 +137,18 @@ public:
   */
   virtual void handshakeComplete();
 
+  //! Received drag information
+  void dragInfoReceived(uint32_t fileNum, const std::string &data);
+
+  //! Received a complete file from the server
+  void onFileReceived(const std::string &data);
+
+  //! Create a new thread and use it to send files to the server
+  void sendFileToServer(const DragFileList &files);
+
+  //! Send dragging file information back to server
+  void sendDragInfo(uint32_t fileCount, const std::string &info, size_t size);
+
   //@}
   //! @name accessors
   //@{
@@ -163,6 +180,12 @@ public:
   }
   size_t getMaximumClipboardReceiveSizeBytes() const;
 
+  //! Return received file data
+  std::string &getReceivedFileData()
+  {
+    return m_receivedFileData;
+  }
+
   //@}
 
   // IScreen overrides
@@ -192,9 +215,27 @@ public:
 
 private:
   void saveRelativeRestorePosition();
+
+  // job data for writing received files to the drop target directory
+  struct DropJob
+  {
+    std::string target;
+    DragFileList files;
+    std::vector<std::string> data;
+  };
+
+  // job data for sending files to the server
+  struct SendFileJob
+  {
+    DragFileList files;
+    std::shared_ptr<FileTransferState> state;
+  };
+
   void sendClipboard(ClipboardID);
   void sendEvent(deskflow::EventTypes);
   void sendConnectionFailedEvent(const char *msg);
+  void sendFileThread(const void *);
+  void writeToDropDirThread(const void *);
   void setupConnecting();
   void setupConnection();
   void setupScreen();
@@ -236,6 +277,20 @@ private:
   IClipboard::Time m_timeClipboard[kClipboardEnd];
   std::string m_dataClipboard[kClipboardEnd];
   IEventQueue *m_events = nullptr;
+
+  // file transfer
+  using AutoThread = std::unique_ptr<Thread>;
+  DragFileList m_dragFileList;
+  std::string m_receivedFileData;
+  std::vector<std::string> m_receivedFiles;
+  AutoThread m_sendFileThread;
+  AutoThread m_writeToDropDirThread;
+  std::weak_ptr<FileTransferState> m_fileTransferState;
+  // guards m_sendFileThread and m_fileTransferState, which are touched
+  // both by the event loop thread and the drag thread
+  std::mutex m_fileTransferMutex;
+  bool m_enableDragDrop = false;
+
   bool m_useSecureNetwork = false;
   bool m_enableClipboard = true;
   bool m_relativeMouseMoves = false;

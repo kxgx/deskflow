@@ -456,7 +456,15 @@ bool EiScreen::setClipboard(ClipboardID id, const IClipboard *clipboard)
     if (!targetClipboard) {
       return false;
     }
-    return IClipboard::copy(targetClipboard, clipboard);
+    const bool ok = IClipboard::copy(targetClipboard, clipboard);
+
+    // re-advertise the updated clipboard to the portal selection so
+    // that local applications see the new content
+    if (ok) {
+      m_portalInputCapture->reclaimClipboardOwnership();
+    }
+
+    return ok;
   }
 
   // Otherwise use our own clipboard

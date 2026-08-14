@@ -358,6 +358,12 @@ bool Screen::isOnScreen() const
 bool Screen::isLockedToScreen() const
 {
   if (uint32_t buttonID = 0; m_screen->isAnyMouseButtonDown(buttonID)) {
+    // when drag and drop is enabled, holding the left mouse button
+    // is interpreted as a drag, so allow the cursor to leave the
+    // screen.
+    if (m_enableDragDrop && buttonID == kButtonLeft) {
+      return false;
+    }
     LOG_DEBUG("locked by mouse buttonID: %d", buttonID);
     return true;
   }
@@ -387,6 +393,46 @@ KeyModifierMask Screen::getActiveModifiers() const
 KeyModifierMask Screen::pollActiveModifiers() const
 {
   return m_screen->pollActiveModifiers();
+}
+
+bool Screen::isDraggingStarted() const
+{
+  return m_screen->isDraggingStarted();
+}
+
+bool Screen::isFakeDraggingStarted() const
+{
+  return m_screen->isFakeDraggingStarted();
+}
+
+void Screen::setDraggingStarted(bool started)
+{
+  m_screen->setDraggingStarted(started);
+}
+
+void Screen::startDraggingFiles(DragFileList &fileList)
+{
+  m_screen->fakeDraggingFiles(fileList);
+}
+
+void Screen::setEnableDragDrop(bool enabled)
+{
+  m_enableDragDrop = enabled;
+}
+
+std::string &Screen::getDraggingFilename() const
+{
+  return m_screen->getDraggingFilename();
+}
+
+void Screen::clearDraggingFilename()
+{
+  m_screen->clearDraggingFilename();
+}
+
+const std::string &Screen::getDropTarget() const
+{
+  return m_screen->getDropTarget();
 }
 
 void *Screen::getEventTarget() const

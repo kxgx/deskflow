@@ -1006,25 +1006,24 @@ extern const char *const kMsgDSetOptions;
  *
  * **Example Transfer Sequence**:
  *
- * Send 4096 bytes
+ * Send 4096 bytes (chunk size is implementation defined, 512 KiB in
+ * deskflow)
  * ```
- * "DFTR\x01\x00\x00\x00\x00\x00\x00\x10\x00"
- * "DFTR\x02[1024 bytes of file data]"
- * "DFTR\x02[1024 bytes of file data]"
- * "DFTR\x02[1024 bytes of file data]"
- * "DFTR\x02[1024 bytes of file data]"
+ * "DFTR\x01" "4096"
+ * "DFTR\x02[file data]"
+ * "DFTR\x02[file data]"
  * "DFTR\x03"
  * ```
  *
  * **Protocol Flow**:
- * 1. Sender initiates with kDataStart containing total file size
+ * 1. Sender initiates with kDataStart containing the file size as
+ *    an ASCII decimal string
  * 2. Sender sends multiple kDataChunk messages with file content
  * 3. Sender concludes with kDataEnd to signal completion
- * 4. Receiver can abort by closing connection
+ * 4. Multiple files are sent as consecutive sequences, one per file
  *
- * @see kMsgDDragInfo, EDataTransfer
+ * @see kMsgDDragInfo
  * @since Protocol version 1.5
- * @deprecated File drag and drop is no longer implemented.
  */
 extern const char *const kMsgDFileTransfer;
 
@@ -1036,26 +1035,27 @@ extern const char *const kMsgDFileTransfer;
  * **Format**: `"DDRG%2i%s"`
  * **Parameters**:
  * - `$1`: Number of files (2 bytes)
- * - `$2`: File paths (string) - Null-separated file paths
+ * - `$2`: Comma separated list of `path,size` pairs
  *
  * **Example**:
  *
  * Dragging 2 files
- * ``` * "DDRG\x00\x02/path/to/file1.txt\x00/path/to/file2.txt\x00"
+ * ```
+ * "DDRG\x00\x02/path/to/file1.txt,1024,/path/to/file2.txt,2048,"
  * ```
  *
  * Sent when a drag-and-drop operation begins. Contains the list
  * of files being dragged. The actual file transfer follows using
- * kMsgDFileTransfer messages.
+ * kMsgDFileTransfer messages, one sequence per file.
  *
- * **File Path Format**:
- * - Paths are null-terminated strings
- * - Multiple paths are concatenated with null separators
- * - Paths should use forward slashes for compatibility
+ * **File List Format**:
+ * - The list is a comma separated sequence of `path,size` pairs
+ * - The path is the full path on the sending machine
+ * - The size is the file size in bytes as an ASCII decimal string
+ * - A trailing comma terminates the list
  *
  * @see kMsgDFileTransfer
  * @since Protocol version 1.5
- * @deprecated File drag and drop is no longer implemented.
  */
 extern const char *const kMsgDDragInfo;
 
