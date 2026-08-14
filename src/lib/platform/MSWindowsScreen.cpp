@@ -330,7 +330,8 @@ void MSWindowsScreen::leave()
   m_isOnScreen = false;
 
   if (isDraggingStarted() && !m_isPrimary) {
-    m_sendDragThread = std::make_unique<Thread>(new TMethodJob<MSWindowsScreen>(this, &MSWindowsScreen::sendDragThread));
+    m_sendDragThread =
+        std::make_unique<Thread>(new TMethodJob<MSWindowsScreen>(this, &MSWindowsScreen::sendDragThread));
   }
 }
 

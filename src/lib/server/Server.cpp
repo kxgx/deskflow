@@ -123,12 +123,8 @@ Server::Server(ServerConfig &config, PrimaryClient *primaryClient, deskflow::Scr
   m_events->addHandler(EventTypes::PrimaryScreenFakeInputEnd, m_inputFilter, [this](const auto &) {
     m_primaryClient->fakeInputEnd();
   });
-  m_events->addHandler(EventTypes::FileChunkSending, this, [this](const auto &e) {
-    handleFileChunkSendingEvent(e);
-  });
-  m_events->addHandler(EventTypes::DragInfoReady, this, [this](const auto &e) {
-    handleDragInfoReady(e);
-  });
+  m_events->addHandler(EventTypes::FileChunkSending, this, [this](const auto &e) { handleFileChunkSendingEvent(e); });
+  m_events->addHandler(EventTypes::DragInfoReady, this, [this](const auto &e) { handleDragInfoReady(e); });
 
   // add connection
   addClient(m_primaryClient);

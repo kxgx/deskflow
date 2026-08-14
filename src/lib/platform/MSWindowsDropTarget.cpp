@@ -8,9 +8,9 @@
 
 #include <QString>
 
+#include <Shlobj.h>
 #include <cassert>
 #include <shellapi.h>
-#include <Shlobj.h>
 
 MSWindowsDropTarget *MSWindowsDropTarget::s_instance = nullptr;
 

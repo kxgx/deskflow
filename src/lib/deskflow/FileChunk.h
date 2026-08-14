@@ -31,8 +31,7 @@ public:
   static FileChunk *data(uint8_t *data, size_t dataSize);
   static FileChunk *end();
 
-  static TransferState
-  assemble(deskflow::IStream *stream, std::string &dataReceived, FileChunkAssemblyState &state);
+  static TransferState assemble(deskflow::IStream *stream, std::string &dataReceived, FileChunkAssemblyState &state);
 
   static void send(deskflow::IStream *stream, uint8_t mark, char *data, size_t dataSize);
 };

@@ -430,7 +430,9 @@ private:
   class DragInfoData : public EventData
   {
   public:
-    DragInfoData(std::string screenName, DragFileList files) : m_screenName(std::move(screenName)), m_files(std::move(files))
+    DragInfoData(std::string screenName, DragFileList files)
+        : m_screenName(std::move(screenName)),
+          m_files(std::move(files))
     {
     }
 

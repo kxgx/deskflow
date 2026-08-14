@@ -33,7 +33,8 @@ public:
   /*!
   Returns false if the transfer was interrupted via \p state.
   */
-  static bool
-  sendFile(const std::string &filename, IEventQueue *events, void *eventTarget,
-           const std::shared_ptr<FileTransferState> &state);
+  static bool sendFile(
+      const std::string &filename, IEventQueue *events, void *eventTarget,
+      const std::shared_ptr<FileTransferState> &state
+  );
 };

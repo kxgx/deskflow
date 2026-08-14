@@ -77,9 +77,7 @@ TransferState FileChunk::assemble(deskflow::IStream *stream, std::string &dataRe
 
   case ChunkType::DataEnd:
     if (state.expectedSize != dataReceived.size()) {
-      LOG_ERR(
-          "corrupted file data, expected size=%zu actual size=%zu", state.expectedSize, dataReceived.size()
-      );
+      LOG_ERR("corrupted file data, expected size=%zu actual size=%zu", state.expectedSize, dataReceived.size());
       return TransferState::Error;
     }
     LOG_DEBUG("file transfer finished, size=%zu", dataReceived.size());
