@@ -1,0 +1,11 @@
+<map id="src/lib/platform/MSWindowsDropTarget.h" name="src/lib/platform/MSWindowsDropTarget.h">
+<area shape="rect" id="Node000001" title=" " alt="" coords="66,5,251,44"/>
+<area shape="rect" id="Node000002" title=" " alt="" coords="5,92,59,117"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="130,47,65,86,62,82,126,43"/>
+<area shape="rect" id="Node000003" title=" " alt="" coords="82,92,139,117"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="149,43,128,81,124,77,145,46"/>
+<area shape="rect" id="Node000004" title=" " alt="" coords="164,92,250,117"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="172,42,194,79,189,78,169,47"/>
+<area shape="rect" id="Node000005" title=" " alt="" coords="274,92,336,117"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="195,42,273,84,267,85,194,47"/>
+</map>

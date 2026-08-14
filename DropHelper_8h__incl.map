@@ -1,0 +1,15 @@
+<map id="src/lib/deskflow/DropHelper.h" name="src/lib/deskflow/DropHelper.h">
+<area shape="rect" id="Node000001" title=" " alt="" coords="58,5,251,30"/>
+<area shape="rect" id="Node000002" href="$DragInformation_8h.html" title=" " alt="" coords="64,78,245,103"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="156,28,157,63,152,62,154,33"/>
+<area shape="rect" id="Node000005" title=" " alt="" coords="5,151,59,175"/>
+<area shape="poly" id="edge6_Node000001_Node000005" title=" " alt="" coords="119,33,85,52,68,64,54,80,41,107,36,136,30,135,36,105,50,76,65,60,83,47,122,28"/>
+<area shape="rect" id="Node000006" title=" " alt="" coords="249,151,306,175"/>
+<area shape="poly" id="edge7_Node000001_Node000006" title=" " alt="" coords="189,28,227,47,244,60,260,76,273,105,279,136,274,134,268,107,255,80,241,64,224,52,189,33"/>
+<area shape="rect" id="Node000003" href="$EventTypes_8h.html" title=" " alt="" coords="88,151,221,175"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="156,101,157,136,152,134,153,106"/>
+<area shape="poly" id="edge4_Node000002_Node000005" title=" " alt="" coords="133,106,67,145,64,141,136,101"/>
+<area shape="poly" id="edge5_Node000002_Node000006" title=" " alt="" coords="175,101,247,142,242,144,175,106"/>
+<area shape="rect" id="Node000004" title=" " alt="" coords="123,223,186,248"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="156,174,157,209,152,207,153,178"/>
+</map>
