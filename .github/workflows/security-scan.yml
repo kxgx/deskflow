@@ -28,15 +28,16 @@ jobs:
           # full history is needed for git blame attribution of findings
           fetch-depth: 0
 
-      # DeepSec is checked out and run directly instead of using its
-      # composite action, which is less transparent and currently
-      # broken (its setup-node cache step fails).
-      - name: Checkout DeepSec scanner (pinned)
-        uses: actions/checkout@v6
-        with:
-          repository: Unclecheng-li/DeepSec
-          ref: c655b822a2aac09240169f21bbadf4ec182e0ff5
-          path: .deepsec
+      # DeepSec is checked out outside of the workspace so that the
+      # scan does not report findings in the scanner's own code. It is
+      # also run directly instead of using its composite action, which
+      # is less transparent and currently broken (its setup-node cache
+      # step fails).
+      - name: Checkout DeepSec scanner (pinned, outside workspace)
+        run: |
+          git clone --quiet https://github.com/Unclecheng-li/DeepSec.git "$RUNNER_TEMP/deepsec"
+          git -C "$RUNNER_TEMP/deepsec" fetch --quiet origin c655b822a2aac09240169f21bbadf4ec182e0ff5
+          git -C "$RUNNER_TEMP/deepsec" checkout --quiet c655b822a2aac09240169f21bbadf4ec182e0ff5
 
       - name: Set up Node.js
         uses: actions/setup-node@v5
@@ -44,13 +45,13 @@ jobs:
           node-version: 22
 
       - name: Build DeepSec scanner
-        working-directory: .deepsec
+        working-directory: ${{ runner.temp }}/deepsec
         run: |
           npm ci
           npm run build
 
       - name: Run DeepSec Shield scan
-        working-directory: .deepsec
+        working-directory: ${{ runner.temp }}/deepsec
         run: |
           node dist/cli.js scan "$GITHUB_WORKSPACE" \
             --fail-on high \
@@ -62,6 +63,13 @@ jobs:
             --storage auto \
             --no-store-findings
 
+      - name: Add scan report to job summary
+        if: always()
+        run: |
+          if [ -f deepsec-report.md ]; then
+            cat deepsec-report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Upload SARIF results to code scanning
         if: always() && hashFiles('deepsec-results.sarif') != ''
         uses: github/codeql-action/upload-sarif@v3
@@ -70,7 +78,7 @@ jobs:
 
       - name: Upload scan report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: deepsec-report
           path: deepsec-report.md
