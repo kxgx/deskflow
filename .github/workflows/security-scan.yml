@@ -57,6 +57,7 @@ jobs:
             --fail-on high \
             --package-verification seed \
             --ai-detection author \
+            --ignore-rules "$GITHUB_WORKSPACE/.github/deepsec-ignore-rules.yml" \
             --github-annotations \
             --sarif "$GITHUB_WORKSPACE/deepsec-results.sarif" \
             --markdown "$GITHUB_WORKSPACE/deepsec-report.md" \
@@ -72,7 +73,7 @@ jobs:
 
       - name: Upload SARIF results to code scanning
         if: always() && hashFiles('deepsec-results.sarif') != ''
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: deepsec-results.sarif
 

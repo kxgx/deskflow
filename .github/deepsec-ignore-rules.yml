@@ -1,0 +1,7 @@
+# Ignore rules for the DeepSec Shield scanner.
+# See the DeepSec ignore-rules.yml format for details.
+
+ignore:
+  - rule: "hardcoded_secret_assignment"
+    path: ".github/workflows/continuous-integration.yml"
+    reason: "false positive: standard GitHub Actions token expression (${{ secrets.GITHUB_TOKEN }}) in release steps"
